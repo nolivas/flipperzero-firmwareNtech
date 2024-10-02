@@ -5,14 +5,23 @@
 #include <furi.h>
 #include <furi_hal_infrared.h>
 
+// Global flag to keep track of IR blaster state
+static bool ir_enabled = true; 
+
 static uint32_t infrared_tx_number_of_transmissions = 0;
 static uint32_t infrared_tx_raw_timings_index = 0;
 static uint32_t infrared_tx_raw_timings_number = 0;
 static uint32_t infrared_tx_raw_start_from_mark = 0;
 static bool infrared_tx_raw_add_silence = false;
 
+// Function to toggle the IR blasters on/off
+void toggle_ir_blaster() {
+    ir_enabled = !ir_enabled; // Toggle the state
+}
+
+// Callback to get raw data for transmission
 FuriHalInfraredTxGetDataState
-    infrared_get_raw_data_callback(void* context, uint32_t* duration, bool* level) {
+infrared_get_raw_data_callback(void* context, uint32_t* duration, bool* level) {
     furi_assert(duration);
     furi_assert(level);
     furi_assert(context);
@@ -36,12 +45,20 @@ FuriHalInfraredTxGetDataState
     return state;
 }
 
+// Function to send raw data with toggle check
 void infrared_send_raw_ext(
     const uint32_t timings[],
     uint32_t timings_cnt,
     bool start_from_mark,
     uint32_t frequency,
     float duty_cycle) {
+
+    // Check if IR blasters are enabled
+    if(!ir_enabled) {
+        furi_log_debug("IR blasters are disabled, transmission aborted");
+        return;
+    }
+
     furi_check(timings);
 
     infrared_tx_raw_start_from_mark = start_from_mark;
@@ -56,6 +73,7 @@ void infrared_send_raw_ext(
     furi_check(!furi_hal_infrared_is_busy());
 }
 
+// Function to send raw IR data (uses the extended function)
 void infrared_send_raw(const uint32_t timings[], uint32_t timings_cnt, bool start_from_mark) {
     infrared_send_raw_ext(
         timings,
@@ -65,8 +83,9 @@ void infrared_send_raw(const uint32_t timings[], uint32_t timings_cnt, bool star
         INFRARED_COMMON_DUTY_CYCLE);
 }
 
+// Callback for getting data in regular transmission
 FuriHalInfraredTxGetDataState
-    infrared_get_data_callback(void* context, uint32_t* duration, bool* level) {
+infrared_get_data_callback(void* context, uint32_t* duration, bool* level) {
     FuriHalInfraredTxGetDataState state;
     InfraredEncoderHandler* handler = context;
     InfraredStatus status = InfraredStatusError;
@@ -94,7 +113,15 @@ FuriHalInfraredTxGetDataState
     return state;
 }
 
+// Main function for sending an infrared message
 void infrared_send(const InfraredMessage* message, int times) {
+
+    // Check if IR blasters are enabled before sending
+    if(!ir_enabled) {
+        furi_log_debug("IR blasters are disabled, transmission aborted");
+        return;
+    }
+
     furi_check(message);
     furi_check(times);
     furi_check(infrared_is_protocol_valid(message->protocol));
